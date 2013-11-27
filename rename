@@ -1,0 +1,288 @@
+#!/usr/bin/perl
+#
+# Rename files by applying arbitrary Perl expressions.
+#
+# Example:
+#  rename 's/foo/bar/' *
+#
+
+# This software is distributed under the "Simplified BSD license":
+#
+# Copyright Michael Cook <michael@waxrat.com>. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY MICHAEL COOK ''AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL MICHAEL COOK OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing official
+# policies, either expressed or implied, of Michael Cook.
+
+use strict;
+use warnings;
+use Getopt::Long;
+use File::Basename;
+
+my ($THIS) = $0 =~ m%([^/]+)$%;
+my $USAGE = <<EOF;
+usage: $THIS -l files		(lowercase)
+   or: $THIS -x files		(URL encode)
+   or: $THIS [-e] perl-expr files
+EOF
+
+#warn "args=(", join("|", @ARGV), ")";
+
+my @EXPR;
+my $MV = "mv";
+my $MKDIR;
+my $QUIET;
+my $DRYRUN;
+my $FORCE;
+my $PREFIX;
+my $DEBUG;
+
+Getopt::Long::config("bundling");
+GetOptions
+("expression|e=s" => sub { push @EXPR, $_[1] },
+ #
+ # Use `perl-expr' as the controlling expression.  This option is useful
+ # to protect patterns that begin with `-'.  You may specify multiple
+ # expressions by preceding each with `-e'.",
+ #
+
+ "l" => sub { push @EXPR, '$_ = lc' },
+ #
+ # Convert to lower case.
+ # (Same as: -e '$_=lc')
+ #
+
+ "x" => sub { push @EXPR, '$_ = clean($_)' },
+ #
+ # Remove all characters that are usually unsafe to have in file names.
+ #
+
+ "u" => sub { push @EXPR, '$_ = url_encode($_)' },
+ #
+ # URL-encode all characters that are usually unsafe to have in file names.
+ #
+
+ "renumber|renum|r=i" => sub { push @EXPR, '$_ = renumber(' . $_[1] . ', $_)' },
+ #
+ # Renumber.  Argument is the number of digits to use.
+ #
+
+ "by-date" => sub {
+     push @EXPR, '$_ = by_date($_)';
+     $MKDIR = 1;
+ },
+ #
+ # Move each file into a subdirectory named according to the file's last
+ # modifcation time.
+ #
+
+ "mkdir" => \$MKDIR,
+ #
+ # When renaming files, make any directories needed for the destination path.
+ #
+
+ "p|prefix=s" => \$PREFIX,
+ #
+ # Same as -e 's/^/<string>/'.
+ #
+
+ "quiet|q" => \$QUIET,
+ #
+ # Be quiet.
+ #
+
+ "command|c=s" => \$MV,
+ #
+ # The command to rename the file.
+ #
+
+ "dry-run|n" => \$DRYRUN,
+ #
+ # Tell what the new file names would be, but don't actually rename any
+ # files.
+ #
+
+ "force|f" => \$FORCE,
+ #
+ # If we try to rename A to B but B already exists, delete B first.
+ #
+
+ "debug!" => \$DEBUG,
+ #
+ # Debug mode.
+ #
+)
+or die $USAGE;
+
+my $exit = 0;
+
+$| = 1; # Auto-flush after each print.
+
+push @EXPR, '$_ = $PREFIX . $_'
+    if defined($PREFIX);
+
+unless (@EXPR)
+{
+    @ARGV or die $USAGE;
+    push @EXPR, shift;
+}
+my $EXPR = join ";\n\t", @EXPR;
+
+# This odd looking "LOOP:" construct is used so "last" will work the way
+# you'd expect.  See perlsyn(1), search for "LOOP:".
+$EXPR = <<EOF;
+LOOP: {
+    do {
+	$EXPR
+    } while 0;
+}
+EOF
+
+warn "> argc " . @ARGV if $DEBUG;
+warn "> argv @ARGV" if $DEBUG;
+warn "> expr ==>$EXPR<==" if $DEBUG;
+
+@ARGV or die $USAGE;
+
+sub url_encode
+{
+    local $_ = shift;
+    s/^-/_/;
+    s!([^-/\w.])!sprintf "%%%02X", ord $1!eg;
+    return $_;
+}
+
+my $counter = 0;
+
+sub renumber
+{
+    my ($digits, $file) = @_;
+    $file =~ s/^.*\././;
+    return sprintf("%0${digits}d", ++$counter);
+}
+
+sub by_date
+{
+    my ($file) = @_;
+
+    my $mtime = (stat $file)[9];
+    unless ($mtime)
+    {
+	warn "stat $file: $!";
+	$exit = 1;
+	return $file;
+    }
+    my ($mday, $mon, $year) = (localtime($mtime))[3, 4, 5];
+    return sprintf "%04d-%02d-%02d/%s", $year + 1900, $mon + 1, $mday, $file;
+}
+
+sub clean
+{
+    local $_ = shift;
+    s/^-/_/;
+    s%([^-/\w.])%%g;
+    return $_;
+}
+
+sub convert_name;
+
+{
+    local $^W;
+    no strict;
+    eval "sub convert_name { $EXPR }";
+    $@ && die $@;
+}
+
+sub shell_quote
+{
+    local $_ = shift;
+    return $_
+	unless m([^-+\w./,~=%]);
+    s/\'/\'\\\'\'/g;
+    return "'$_'";
+}
+
+my %mkdir;
+for (@ARGV)
+{
+    my $was = $_;
+    convert_name();
+    if ($was eq $_)
+    {
+	# We don't need to rename this file.  But verify that the file exists,
+	# in case the user mistyped the command.
+	unless (lstat $was)
+	{
+	    warn "$THIS: lstat $was: $!\n";
+	    $exit = 1;
+	    next;
+	}
+	warn "> unchanged: $was" if $DEBUG;
+	next;
+    }
+    warn "> new name $_" if $DEBUG;
+    if (! $FORCE && -e $_)
+    {
+	warn "$THIS: Will not rename $was to $_: File already exists\n";
+	$exit = 1;
+	next;
+    }
+
+    if ($MKDIR)
+    {
+	my $dir = dirname $_;
+	if (! $mkdir{$dir}++ && ! -d $dir)
+	{
+	    print "mkdir -p $dir\n"
+		unless $QUIET;
+	    unless ($DRYRUN)
+	    {
+		system "mkdir", "-p", $dir;
+		$exit = 1
+		    if $?;
+	    }
+	}
+    }
+
+    print "$MV ", shell_quote($was), " ", shell_quote($_), "\n"
+	unless $QUIET;
+    unless ($DRYRUN)
+    {
+	if ($MV eq "mv")
+	{
+	    unless (rename $was, $_)
+	    {
+		warn "mv $was $_ : $!";
+		$exit = 1;
+	    }
+	}
+	else
+	{
+	    system split(" ", $MV), $was, $_;
+	    $exit = 1
+		if $?;
+	}
+    }
+}
+exit $exit;
