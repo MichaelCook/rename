@@ -226,23 +226,21 @@ sub shell_quote
 my %mkdir;
 for (@ARGV)
 {
+    unless (lstat)
+    {
+	warn "$THIS: lstat $_: $!\n";
+	$exit = 1;
+	next;
+    }
     my $was = $_;
     convert_name();
     if ($was eq $_)
     {
-	# We don't need to rename this file.  But verify that the file exists,
-	# in case the user mistyped the command.
-	unless (lstat $was)
-	{
-	    warn "$THIS: lstat $was: $!\n";
-	    $exit = 1;
-	    next;
-	}
 	warn "> unchanged: $was" if $DEBUG;
 	next;
     }
     warn "> new name $_" if $DEBUG;
-    if (! $FORCE && -e $_)
+    if (! $FORCE && lstat)
     {
 	warn "$THIS: Will not rename $was to $_: File already exists\n";
 	$exit = 1;
