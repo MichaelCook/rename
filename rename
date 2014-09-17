@@ -55,7 +55,6 @@ my $MKDIR;
 my $QUIET;
 my $DRYRUN;
 my $FORCE;
-my $PREFIX;
 my $DEBUG;
 
 Getopt::Long::config("bundling");
@@ -97,14 +96,14 @@ GetOptions
  # modifcation time.
  #
 
- "mkdir" => \$MKDIR,
+ "mkdir|m" => \$MKDIR,
  #
  # When renaming files, make any directories needed for the destination path.
  #
 
- "p|prefix=s" => \$PREFIX,
+ "p|prefix=s" => sub { push @EXPR, "s/^/$_[1]/" },
  #
- # Same as -e 's/^/<string>/'.
+ # Same as -e 's/^/prefix/'.
  #
 
  "quiet|q" => \$QUIET,
@@ -138,9 +137,6 @@ or die $USAGE;
 my $exit = 0;
 
 $| = 1; # Auto-flush after each print.
-
-push @EXPR, '$_ = $PREFIX . $_'
-    if defined($PREFIX);
 
 unless (@EXPR)
 {
