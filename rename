@@ -20,20 +20,16 @@
 #       notice, this list of conditions and the following disclaimer in the
 #       documentation and/or other materials provided with the distribution.
 #
-# THIS SOFTWARE IS PROVIDED BY MICHAEL COOK ''AS IS'' AND ANY EXPRESS OR
-# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
-# EVENT SHALL MICHAEL COOK OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
-# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# The views and conclusions contained in the software and documentation are
-# those of the authors and should not be interpreted as representing official
-# policies, either expressed or implied, of Michael Cook.
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use strict;
 use warnings;
@@ -42,8 +38,8 @@ use File::Basename;
 
 my ($THIS) = $0 =~ m%([^/]+)$%;
 my $USAGE = <<EOF;
-usage: $THIS -l files		(lowercase)
-   or: $THIS -x files		(URL encode)
+usage: $THIS -l files           (lowercase)
+   or: $THIS -x files           (URL encode)
    or: $THIS [-e] perl-expr files
 EOF
 
@@ -150,7 +146,7 @@ my $EXPR = join ";\n\t", @EXPR;
 $EXPR = <<EOF;
 LOOP: {
     do {
-	$EXPR
+        $EXPR
     } while 0;
 }
 EOF
@@ -185,9 +181,9 @@ sub by_date
     my $mtime = (stat $file)[9];
     unless ($mtime)
     {
-	warn "stat $file: $!";
-	$exit = 1;
-	return $file;
+        warn "stat $file: $!";
+        $exit = 1;
+        return $file;
     }
     my ($mday, $mon, $year) = (localtime($mtime))[3, 4, 5];
     return sprintf "%04d-%02d-%02d/%s", $year + 1900, $mon + 1, $mday, $file;
@@ -214,7 +210,7 @@ sub shell_quote
 {
     local $_ = shift;
     return $_
-	unless m([^-+\w./,~=%]);
+        unless m([^@%\w:,./=+-]);
     s/\'/\'\\\'\'/g;
     return "'$_'";
 }
@@ -222,61 +218,61 @@ sub shell_quote
 my %mkdir;
 for (@ARGV)
 {
-    unless (lstat)
+    if (!$DRYRUN && !lstat)
     {
-	warn "$THIS: lstat $_: $!\n";
-	$exit = 1;
-	next;
+        warn "$THIS: lstat $_: $!\n";
+        $exit = 1;
+        next;
     }
     my $was = $_;
     convert_name();
     if ($was eq $_)
     {
-	warn "> unchanged: $was" if $DEBUG;
-	next;
+        warn "> unchanged: $was" if $DEBUG;
+        next;
     }
     warn "> new name $_" if $DEBUG;
     if (! $FORCE && lstat)
     {
-	warn "$THIS: Will not rename $was to $_: File already exists\n";
-	$exit = 1;
-	next;
+        warn "$THIS: Will not rename $was to $_: File already exists\n";
+        $exit = 1;
+        next;
     }
 
     if ($MKDIR)
     {
-	my $dir = dirname $_;
-	if (! $mkdir{$dir}++ && ! -d $dir)
-	{
-	    print "mkdir -p $dir\n"
-		unless $QUIET;
-	    unless ($DRYRUN)
-	    {
-		system "mkdir", "-p", $dir;
-		$exit = 1
-		    if $?;
-	    }
-	}
+        my $dir = dirname $_;
+        if (! $mkdir{$dir}++ && ! -d $dir)
+        {
+            print "mkdir -p $dir\n"
+                unless $QUIET;
+            unless ($DRYRUN)
+            {
+                system "mkdir", "-p", $dir;
+                $exit = 1
+                    if $?;
+            }
+        }
     }
 
     print "$MV ", shell_quote($was), " ", shell_quote($_), "\n"
-	unless $QUIET;
+        unless $QUIET;
     unless ($DRYRUN)
     {
-	if ($MV eq "mv")
-	{
-	    unless (rename $was, $_)
-	    {
-		warn "mv $was $_ : $!";
-		$exit = 1;
-	    }
-	}
-	else
-	{
-	    system split(" ", $MV), $was, $_;
-	    $exit = 1
-		if $?;
-	}
+        if ($MV eq "mv")
+        {
+            unless (rename $was, $_)
+            {
+                warn "mv $was $_ : $!";
+                $exit = 1;
+            }
+        }
+        else
+        {
+            system split(" ", $MV), $was, $_;
+            $exit = 1
+                if $?;
+        }
     }
 }
 exit $exit;
