@@ -5,6 +5,10 @@
 # Example:
 #  rename 's/foo/bar/' *
 #
+# Add a file's MD5 signature to the file name.
+#
+#  rename 'sub sig{`md5sum $_[0]`=~/\w+/or die;"-$&."} s/\./sig($_)/e;' *.mp3
+#
 
 # This software is distributed under the "Simplified BSD license":
 #
@@ -68,14 +72,22 @@ GetOptions
  # (Same as: -e '$_=lc')
  #
 
- "x" => sub { push @EXPR, '$_ = clean($_)' },
+ "x" => sub { push @EXPR, 'clean()' },
  #
  # Remove all characters that are usually unsafe to have in file names.
  #
 
- "u" => sub { push @EXPR, '$_ = url_encode($_)' },
+ "u" => sub { push @EXPR, 'url_encode()' },
  #
  # URL-encode all characters that are usually unsafe to have in file names.
+ #
+
+ "unique|U" => sub { push @EXPR, 'unique()' },
+ #
+ # Generate a unique name by inserting #123 before the extension.
+ #
+ #   rename -e 's/foo/bar/' -U foo.txt
+ #   rename 's/foo/bar/;unique' foo.txt  # same
  #
 
  "renumber|renum|r=i" => sub { push @EXPR, '$_ = renumber(' . $_[1] . ', $_)' },
@@ -157,12 +169,26 @@ warn "> expr ==>$EXPR<==" if $DEBUG;
 
 @ARGV or die $USAGE;
 
+sub unique
+{
+    while (-e)
+    {
+        # foo#1.txt -> foo#2.txt
+        # foo#1     -> foo#2
+        next if s/\#(\d+)/"#" . ($1 + 1)/e;
+
+        # foo.bar.txt -> foo.bar#1.txt
+        next if s/^(.+)\./$1#1./;
+
+        # foo -> foo#1
+        $_ .= "#1";
+    }
+}
+
 sub url_encode
 {
-    local $_ = shift;
     s/^-/_/;
     s!([^-/\w.])!sprintf "%%%02X", ord $1!eg;
-    return $_;
 }
 
 my $counter = 0;
@@ -191,10 +217,8 @@ sub by_date
 
 sub clean
 {
-    local $_ = shift;
     s/^-/_/;
     s%([^-/\w.])%%g;
-    return $_;
 }
 
 sub convert_name;
