@@ -217,8 +217,8 @@ sub by_date
 
 sub clean
 {
+    s%([^-/\w.]+)%-%g;
     s/^-/_/;
-    s%([^-/\w.])%%g;
 }
 
 sub convert_name;
