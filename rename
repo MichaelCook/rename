@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #
 # Rename files by applying arbitrary Perl expressions.
 #
@@ -10,31 +10,6 @@
 #  rename 'sub sig{`md5sum $_[0]`=~/\w+/or die;"-$&."} s/\./sig($_)/e;' *.mp3
 #
 
-# This software is distributed under the "Simplified BSD license":
-#
-# Copyright Michael Cook <michael@waxrat.com>. All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-#    1. Redistributions of source code must retain the above copyright notice,
-#       this list of conditions and the following disclaimer.
-#
-#    2. Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in the
-#       documentation and/or other materials provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 use strict;
 use warnings;
 use Getopt::Long;
@@ -43,14 +18,13 @@ use File::Basename;
 my ($THIS) = $0 =~ m%([^/]+)$%;
 my $USAGE = <<EOF;
 usage: $THIS -l files           (lowercase)
-   or: $THIS -x files           (URL encode)
+   or: $THIS -c files           (clean - characters that are usually unsafe)
+   or: $THIS -u files           (URL encode)
    or: $THIS [-e] perl-expr files
 EOF
 
-#warn "args=(", join("|", @ARGV), ")";
-
 my @EXPR;
-my $MV = "mv";
+my $COMMAND = "mv";
 my $MKDIR;
 my $QUIET;
 my $DRYRUN;
@@ -72,7 +46,7 @@ GetOptions
  # (Same as: -e '$_=lc')
  #
 
- "x" => sub { push @EXPR, 'clean()' },
+ "c" => sub { push @EXPR, 'clean()' },
  #
  # Remove all characters that are usually unsafe to have in file names.
  #
@@ -119,7 +93,7 @@ GetOptions
  # Be quiet.
  #
 
- "command|c=s" => \$MV,
+ "command|c=s" => \$COMMAND,
  #
  # The command to rename the file.
  #
@@ -136,9 +110,6 @@ GetOptions
  #
 
  "debug!" => \$DEBUG,
- #
- # Debug mode.
- #
 )
 or die $USAGE;
 
@@ -279,24 +250,13 @@ for (@ARGV)
         }
     }
 
-    print "$MV ", shell_quote($was), " ", shell_quote($_), "\n"
+    print "$COMMAND ", shell_quote($was), " ", shell_quote($_), "\n"
         unless $QUIET;
     unless ($DRYRUN)
     {
-        if ($MV eq "mv")
-        {
-            unless (rename $was, $_)
-            {
-                warn "mv $was $_ : $!";
-                $exit = 1;
-            }
-        }
-        else
-        {
-            system split(" ", $MV), $was, $_;
-            $exit = 1
-                if $?;
-        }
+        system split(" ", $COMMAND), $was, $_;
+        $exit = 1
+            if $?;
     }
 }
 exit $exit;
